@@ -120,6 +120,7 @@ parameter CONF_STR = {
 	"P4-;",
 	"P4O[66:65],RAM Clear,No,$00,$FF,Random;",
 	"P4O[64],PPU Reset Behavior,Famicom,NES;",
+	"P4O[71:70],CPU Turbo,Off,VBlank 2x,VBlank 4x,Always 2x;",
 	"P4OQ,Video Dijitter,Enabled,Disabled;",
 	"P4O[69],Debug Dots,Off,On;",
 	"H8P5,Vs. DIPs;",
@@ -787,6 +788,7 @@ NES nes (
 	.apu_ce          (apu_ce),
 	// Video
 	.ex_sprites      (status[25]),
+	.turbo           (status[71:70]),
 	.color           (color),
 	.hsync           (nes_hsync),
 	.hblank          (nes_hblank),
