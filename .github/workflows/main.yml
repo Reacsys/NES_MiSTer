@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: krayon/quartus-prime-lite:17.1.0
+      image: raetro/quartus:17.1
 
     steps:
       - name: Checkout
