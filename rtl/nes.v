@@ -235,16 +235,47 @@ reg [1:0] div_sys = 2'd0;
 // CE's
 wire cpu_ce  = (div_cpu == div_cpu_n);
 wire ppu_ce  = (div_ppu == div_ppu_n);
-wire in_vblank_turbo = (scanline >= 9'd241);
-wire turbo_active = (turbo == 2'd3) || (turbo[0] && in_vblank_turbo);
-wire [4:0] turbo_div_n = (turbo == 2'd2) ? 5'd3 : 5'd6;
+
+// -------------------------------------------------------
+// CPU TURBO / POST-RENDER
+// turbo == 0 : Off
+// turbo == 1 : VBlank 2x
+// turbo == 2 : VBlank 4x + лёгкий post-render
+// turbo == 3 : Always 2x
+// -------------------------------------------------------
+
+// Post-render зона: сразу после последней видимой строки
+// (scanline 240) + весь VBlank
+wire in_post_render = (scanline >= 9'd240);
+
+// Когда разрешаем ускорение
+wire turbo_active =
+    (turbo == 2'd3) ||                          // Always 2x
+    (turbo == 2'd1 && scanline >= 9'd241) ||    // VBlank 2x
+    (turbo == 2'd2 && in_post_render);          // VBlank 4x + post-render
+
+// Насколько сильно ускоряем
+// div = 6 → примерно 2x
+// div = 3 → примерно 4x
+// div = 2 → ещё агрессивнее (осторожно)
+wire [4:0] turbo_div_n =
+    (turbo == 2'd2) ? 5'd3 :        // режим 2 → ~4x
+    (turbo == 2'd1) ? 5'd6 :        // режим 1 → ~2x
+                      5'd6;         // Always 2x тоже ~2x
+
 reg [4:0] div_turbo = 5'd1;
+
 always @(posedge clk) begin
-  if (cpu_ce || reset) div_turbo <= 5'd1;
-  else if (ppu_ce && turbo_active)
-    div_turbo <= (div_turbo >= turbo_div_n) ? 5'd1 : div_turbo + 5'd1;
+    if (cpu_ce || reset)
+        div_turbo <= 5'd1;
+    else if (ppu_ce && turbo_active)
+        div_turbo <= (div_turbo >= turbo_div_n) ? 5'd1 : div_turbo + 5'd1;
 end
+
+// Дополнительный тик CPU между обычными
 wire turbo_ce = turbo_active && ppu_ce && (div_turbo == turbo_div_n) && !cpu_ce;
+
+// Итоговый сигнал для CPU и DMA
 wire cpu_ce_turbo = cpu_ce || turbo_ce;
 wire cart_ce = (div_cpu == div_cpu_n - 5'd2); // First PPU cycle where cpu data is visible.
 
