@@ -97,6 +97,7 @@ module NES(
 
 	input   [4:0] audio_channels, // Enabled audio channels
 	input         ex_sprites,
+	input   [1:0] turbo,
 	input   [1:0] mask,
 	input 		  dejitter_timing,
 
@@ -234,6 +235,17 @@ reg [1:0] div_sys = 2'd0;
 // CE's
 wire cpu_ce  = (div_cpu == div_cpu_n);
 wire ppu_ce  = (div_ppu == div_ppu_n);
+wire in_vblank_turbo = (scanline >= 9'd241);
+wire turbo_active = (turbo == 2'd3) || (turbo[0] && in_vblank_turbo);
+wire [4:0] turbo_div_n = (turbo == 2'd2) ? 5'd3 : 5'd6;
+reg [4:0] div_turbo = 5'd1;
+always @(posedge clk) begin
+  if (cpu_ce || reset) div_turbo <= 5'd1;
+  else if (ppu_ce && turbo_active)
+    div_turbo <= (div_turbo >= turbo_div_n) ? 5'd1 : div_turbo + 5'd1;
+end
+wire turbo_ce = turbo_active && ppu_ce && (div_turbo == turbo_div_n) && !cpu_ce;
+wire cpu_ce_turbo = cpu_ce || turbo_ce;
 wire cart_ce = (div_cpu == div_cpu_n - 5'd2); // First PPU cycle where cpu data is visible.
 
 // Signals
@@ -428,7 +440,7 @@ T65 cpu(
 	.res_n  (~cpu_reset && ~cold_reset),
 	.pwr_n  (~cold_reset), // Cold boot, power reset, must be paired with reset
 	.clk    (clk),
-	.enable (cpu_ce),
+	.enable (cpu_ce_turbo),
 	.rdy    (~pause_cpu),
 
 	.IRQ_n  (~(apu_irq | mapper_irq)),
@@ -469,7 +481,7 @@ wire get_ce, put_ce;
 
 DmaController dma(
 	.clk            (clk),
-	.ce             (cpu_ce),
+	.ce             (cpu_ce_turbo),
 	.reset          (reset_noSS),
 	.put_cycle      (odd_or_even),                // Even or odd cycle
 	.sprite_trigger (apu_cs && addr[4:0] == 5'h14 && ~cpu_rnw), // Sprite trigger
