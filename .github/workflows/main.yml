@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Build
         run: |
@@ -22,7 +22,7 @@ jobs:
           quartus_asm NES
 
       - name: Upload RBF
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: NES_MiSTer_turbo
           path: "*.rbf"
