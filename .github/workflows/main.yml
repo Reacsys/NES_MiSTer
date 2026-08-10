@@ -8,18 +8,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: raetro/quartus:17.1
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build with Quartus
         run: |
-          quartus_map --read_settings_files=on NES
-          quartus_fit --read_settings_files=off NES
-          quartus_asm NES
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            raetro/quartus:17.1 \
+            bash -c "
+              quartus_map --read_settings_files=on NES
+              quartus_fit --read_settings_files=off NES
+              quartus_asm NES
+            "
 
       - name: Upload RBF
         uses: actions/upload-artifact@v4
