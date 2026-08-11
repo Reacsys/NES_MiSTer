@@ -13,6 +13,7 @@ module VramAddressGen (
 	input ce,
 	input reset,
 	input is_rendering,
+	input [3:0] extra_lines,
 	input [2:0] ain,     // input address from CPU
 	input [7:0] din,     // data input
 	input read,          // read
@@ -332,19 +333,30 @@ always @(posedge clk) if (reset) begin
 		scanline          <= SS_CLKGEN[22:14]; // 0;
 		is_pre_render     <= SS_CLKGEN[   23]; // 0;
 		is_even_frame      <= SS_CLKGEN[   24]; // 0; // Resets to 0, the first frame will always end with 341 pixels.
+		extra_cnt <= 9'd0;
 	end else begin
 		scanline          <= 0;
 		is_pre_render     <= 0;
 		is_even_frame      <= 0; // Resets to 0, the first frame will always end with 341 pixels.
+		extra_cnt <= 9'd0;
 	end
 end else if (ce && end_of_line) begin
-	// Once the scanline counter reaches end of 260, it gets reset to -1.
-	scanline <= (scanline == vblank_end_sl) ? 9'b111111111 : scanline + 1'd1;
-	// The pre render flag is set while we're on scanline -1.
-	is_pre_render <= (scanline == vblank_end_sl);
-
-	if (scanline == 255)
-		is_even_frame <= ~is_even_frame;
+    reg [8:0] extra_cnt;
+    wire [8:0] extra_needed =
+        (extra_lines == 4'd1) ? 9'd64  :
+        (extra_lines == 4'd2) ? 9'd128 :
+        (extra_lines == 4'd3) ? 9'd192 :
+        (extra_lines == 4'd4) ? 9'd256 : 9'd0;
+    wire doing_extra = (scanline == 9'd240) && (extra_cnt < extra_needed) && (extra_needed != 0);
+    if (doing_extra) begin
+        extra_cnt <= extra_cnt + 1'd1;
+    end else begin
+        extra_cnt <= 9'd0;
+        scanline <= (scanline == vblank_end_sl) ? 9'b111111111 : scanline + 1'd1;
+        is_pre_render <= (scanline == vblank_end_sl);
+        if (scanline == 255)
+            is_even_frame <= ~is_even_frame;
+    end
 end
 
 endmodule // ClockGen
@@ -1324,6 +1336,7 @@ module PPU(
 	output        vblank,
 	output        short_frame,
 	input         extra_sprites,
+	input  [3:0]  extra_lines,
 	input  [1:0]  mask,
 	output        render_ena_out,
 	output        evenframe,
@@ -1440,6 +1453,7 @@ ClockGen clock(
 	.sys_type            (sys_type),
 	.is_rendering        (rendering_regs),
 	.scanline            (scanline),
+	.extra_lines         (extra_lines),
 	.cycle               (cycle),
 	.is_in_vblank        (is_in_vblank),
 	.end_of_line         (end_of_line),
