@@ -12,7 +12,6 @@
 // 3) Sprite DMA reads the address value on the last clock of cpu_read=0
 // 4) If DMC interrupts Sprite, then it runs on the even cycle, and the odd cycle will be idle (pause_cpu=1, aout_enable=0)
 // 5) When DMC triggers && interrupts CPU, there will be 2-3 cycles (pause_cpu=1, aout_enable=0) before DMC DMA starts.
-
 // https://wiki.nesdev.com/w/index.php/PPU_OAM
 // https://wiki.nesdev.com/w/index.php/APU_DMC
 // https://forums.nesdev.com/viewtopic.php?f=3&t=6100
@@ -97,7 +96,7 @@ module NES(
 
 	input   [4:0] audio_channels, // Enabled audio channels
 	input         ex_sprites,
-	input   [1:0] turbo,
+	input   [3:0] extra_lines,
 	input   [1:0] mask,
 	input 		  dejitter_timing,
 
@@ -235,48 +234,6 @@ reg [1:0] div_sys = 2'd0;
 // CE's
 wire cpu_ce  = (div_cpu == div_cpu_n);
 wire ppu_ce  = (div_ppu == div_ppu_n);
-
-// -------------------------------------------------------
-// CPU TURBO / POST-RENDER
-// turbo == 0 : Off
-// turbo == 1 : VBlank 2x
-// turbo == 2 : VBlank 4x + лёгкий post-render
-// turbo == 3 : Always 2x
-// -------------------------------------------------------
-
-// Post-render зона: сразу после последней видимой строки
-// (scanline 240) + весь VBlank
-wire in_post_render = (scanline >= 9'd240);
-
-// Когда разрешаем ускорение
-wire turbo_active =
-    (turbo == 2'd3) ||                          // Always 2x
-    (turbo == 2'd1 && scanline >= 9'd241) ||    // VBlank 2x
-    (turbo == 2'd2 && in_post_render);          // VBlank 4x + post-render
-
-// Насколько сильно ускоряем
-// div = 6 → примерно 2x
-// div = 3 → примерно 4x
-// div = 2 → ещё агрессивнее (осторожно)
-wire [4:0] turbo_div_n =
-    (turbo == 2'd2) ? 5'd3 :        // режим 2 → ~4x
-    (turbo == 2'd1) ? 5'd6 :        // режим 1 → ~2x
-                      5'd6;         // Always 2x тоже ~2x
-
-reg [4:0] div_turbo = 5'd1;
-
-always @(posedge clk) begin
-    if (cpu_ce || reset)
-        div_turbo <= 5'd1;
-    else if (ppu_ce && turbo_active)
-        div_turbo <= (div_turbo >= turbo_div_n) ? 5'd1 : div_turbo + 5'd1;
-end
-
-// Дополнительный тик CPU между обычными
-wire turbo_ce = turbo_active && ppu_ce && (div_turbo == turbo_div_n) && !cpu_ce;
-
-// Итоговый сигнал для CPU и DMA
-wire cpu_ce_turbo = cpu_ce || turbo_ce;
 wire cart_ce = (div_cpu == div_cpu_n - 5'd2); // First PPU cycle where cpu data is visible.
 
 // Signals
@@ -471,7 +428,7 @@ T65 cpu(
 	.res_n  (~cpu_reset && ~cold_reset),
 	.pwr_n  (~cold_reset), // Cold boot, power reset, must be paired with reset
 	.clk    (clk),
-	.enable (cpu_ce_turbo),
+	.enable (cpu_ce),
 	.rdy    (~pause_cpu),
 
 	.IRQ_n  (~(apu_irq | mapper_irq)),
@@ -512,7 +469,7 @@ wire get_ce, put_ce;
 
 DmaController dma(
 	.clk            (clk),
-	.ce             (cpu_ce_turbo),
+	.ce             (cpu_ce),
 	.reset          (reset_noSS),
 	.put_cycle      (odd_or_even),                // Even or odd cycle
 	.sprite_trigger (apu_cs && addr[4:0] == 5'h14 && ~cpu_rnw), // Sprite trigger
@@ -683,6 +640,7 @@ PPU ppu(
 	.emphasis         (emphasis),
 	.short_frame      (skip_pixel),
 	.extra_sprites    (ex_sprites),
+	.extra_lines      (extra_lines),
 	.mask             (mask),
 	.render_ena_out   (render_ena),
 	.evenframe        (evenframe),
