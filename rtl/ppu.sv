@@ -175,6 +175,7 @@ module ClockGen #(parameter USE_SAVESTATE = 0) (
 	input reset,
 	input [1:0] sys_type,
 	input is_rendering,
+	input [3:0] extra_lines,
 	output reg [8:0] scanline,
 	output reg [8:0] cycle,
 	output reg is_in_vblank,
@@ -200,7 +201,12 @@ module ClockGen #(parameter USE_SAVESTATE = 0) (
 
 reg is_even_frame = 0; // 1 indicates even frame.
 assign evenframe = is_even_frame;
-
+reg  [8:0] extra_cnt = 9'd0;
+wire [8:0] extra_needed =
+    (extra_lines == 4'd1) ? 9'd64  :
+    (extra_lines == 4'd2) ? 9'd128 :
+    (extra_lines == 4'd3) ? 9'd192 :
+    (extra_lines == 4'd4) ? 9'd256 : 9'd0;
 // Dendy is 291 to 310
 wire [8:0] vblank_start_sl;
 wire [8:0] vblank_end_sl;
@@ -341,14 +347,7 @@ always @(posedge clk) if (reset) begin
 		extra_cnt <= 9'd0;
 	end
 end else if (ce && end_of_line) begin
-    reg [8:0] extra_cnt;
-    wire [8:0] extra_needed =
-        (extra_lines == 4'd1) ? 9'd64  :
-        (extra_lines == 4'd2) ? 9'd128 :
-        (extra_lines == 4'd3) ? 9'd192 :
-        (extra_lines == 4'd4) ? 9'd256 : 9'd0;
-    wire doing_extra = (scanline == 9'd240) && (extra_cnt < extra_needed) && (extra_needed != 0);
-    if (doing_extra) begin
+    if ((scanline == 9'd240) && (extra_cnt < extra_needed) && (extra_needed != 0)) begin
         extra_cnt <= extra_cnt + 1'd1;
     end else begin
         extra_cnt <= 9'd0;
