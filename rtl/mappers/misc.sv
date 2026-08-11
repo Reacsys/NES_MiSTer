@@ -2585,6 +2585,87 @@ assign vram_a10 = mirroring ? chr_ain[11] : chr_ain[10];
 
 endmodule
 
+// #233 - BMC 22+20-in-1 / 42-in-1 (Reset-based)
+module Mapper233(
+	input        clk,
+	input        ce,
+	input        enable,
+	input [31:0] flags,
+	input [15:0] prg_ain,
+	inout [21:0] prg_aout_b,
+	input        prg_read,
+	input        prg_write,
+	input  [7:0] prg_din,
+	inout  [7:0] prg_dout_b,
+	inout        prg_allow_b,
+	input [13:0] chr_ain,
+	inout [21:0] chr_aout_b,
+	input        chr_read,
+	inout        chr_allow_b,
+	inout        vram_a10_b,
+	inout        vram_ce_b,
+	inout        irq_b,
+	input [15:0] audio_in,
+	inout [15:0] audio_b,
+	inout [15:0] flags_out_b
+);
+
+assign prg_aout_b   = enable ? prg_aout : 22'hZ;
+assign prg_dout_b   = enable ? 8'hFF : 8'hZ;
+assign prg_allow_b  = enable ? prg_allow : 1'hZ;
+assign chr_aout_b   = enable ? chr_aout : 22'hZ;
+assign chr_allow_b  = enable ? chr_allow : 1'hZ;
+assign vram_a10_b   = enable ? vram_a10 : 1'hZ;
+assign vram_ce_b    = enable ? vram_ce : 1'hZ;
+assign irq_b        = enable ? 1'b0 : 1'hZ;
+assign flags_out_b  = enable ? flags_out : 16'hZ;
+assign audio_b      = enable ? {1'b0, audio_in[15:1]} : 16'hZ;
+
+wire [21:0] prg_aout, chr_aout;
+wire prg_allow;
+wire chr_allow;
+wire vram_a10;
+wire vram_ce;
+reg [15:0] flags_out = 0;
+
+reg [7:0] reg0;
+reg [7:0] reg1;
+
+wire prg_mode  = reg0[5];
+wire mirroring = reg0[6];
+wire [6:0] prg_bank = {reg1[0], reg0[4:0]};
+
+always @(posedge clk) begin
+	if (~enable) begin
+		reg0 <= 8'h00;
+		reg1 <= 8'h00;
+	end else if (ce) begin
+		if (prg_ain[15] && prg_write) begin
+			if (prg_ain[0] == 1'b0)
+				reg0 <= prg_din;
+			else
+				reg1 <= prg_din;
+		end
+	end
+end
+
+reg [6:0] prg_page;
+always @* begin
+	if (prg_mode == 1'b0)
+		prg_page = {prg_bank[6:1], prg_ain[14]};
+	else
+		prg_page = prg_bank;
+end
+
+assign prg_aout  = {2'b00, prg_page, prg_ain[13:0]};
+assign prg_allow = prg_ain[15] && !prg_write;
+assign chr_aout  = {9'b10_0000_000, chr_ain[12:0]};
+assign chr_allow = 1'b1;
+assign vram_ce   = chr_ain[13];
+assign vram_a10  = mirroring ? chr_ain[10] : chr_ain[11];
+
+endmodule
+
 // #31 -  NSF Player
 module NSF(
 	input        clk,         // System clock
